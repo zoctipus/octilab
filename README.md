@@ -52,7 +52,6 @@ Open VSCode in the repository folder, press `Ctrl + Shift + P`, type "run task",
 ## Running and Training
 
 - Run Inference: 
-
     -   `python play.py --task Isaac-Chop-Ball-Hebi-v0 --num_envs 3 --checkpoint models/cube_model_1600.pt`
 
 
