@@ -77,7 +77,7 @@ def create_parent_xforms(asset_usd_path, source_prim_path, save_as_path=None):
         omni.usd.get_context().save_as_stage(save_as_path)
 
 
-convert_asset_instanceable("/home/octipus/Projects/tychoorbit/tychoorbit/assets/tycho_robot.usd",
-                           "/hebi",
-                           "/home/octipus/Projects/tychoorbit/tychoorbit/assets/hebi_robot_instanceable.usd",
+convert_asset_instanceable("/home/octipus/Projects/lab.tycho/datasets/robots/leap_hand.usd",
+                           "/onshape",
+                           "/home/octipus/Projects/lab.tycho/datasets/robots/leap_hand_instanceable.usd",
                            create_xforms=False)

@@ -39,9 +39,8 @@ class Se3KeyboardAbsolute(Se3Keyboard):
         super().__init__(pos_sensitivity, rot_sensitivity)
         self.device = device
         self.absolute_pose = torch.zeros(7, device=self.device)
-        self.init_pose = torch.tensor([[-0.265, -0.28, 0.05, 0.0,  0.0,  1, 0.0]], device=self.device)
-        # self.init_pose = torch.tensor(
-        #   [[-0.3000, -0.3000,  0.0500, -1.5497e-05,  2.0993e-05,  7.1197e-01, -7.0221e-01]],device = self.device)
+        # self.init_pose = torch.tensor([[-0.265, -0.28, 0.05, 0.0, 0.0, 1, 0.0]], device=self.device)
+        self.init_pose = torch.tensor([[-0.3000, -0.3000, 0.0500, -1.5497e-05, 2.0993e-05, 7.1197e-01, -7.0221e-01]], device = self.device)
 
     def reset(self):
         super().reset()
@@ -76,7 +75,7 @@ def apply_local_translation(current_position, local_translation, orientation_qua
     # Ensure local_translation is correctly shaped for batch matrix multiplication
     local_translation = local_translation.unsqueeze(-1)  # Shape becomes (n, 3, 1) for matmul
 
-    # local_translation[:, [1, 2]] = -local_translation[:, [2, 1]]
+    local_translation[:, [1, 2]] = -local_translation[:, [2, 1]]
     # Rotate the local translation vector to align with the global frame
     global_translation = torch.matmul(rotation_matrix, local_translation).squeeze(-1)  # Back to shape (n, 3)
 

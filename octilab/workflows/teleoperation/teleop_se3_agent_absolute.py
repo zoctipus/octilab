@@ -63,10 +63,10 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, use_gpu=not args_cli.cpu, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
-    # modify configuration
-    env_cfg.terminations.time_out = None
     env_cfg.decimation = 2
     env_cfg.sim.dt = 0.05 / env_cfg.decimation
+    # modify configuration
+    env_cfg.terminations.time_out = None
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
     # check environment name (for reach , we don't allow the gripper)

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from omni.isaac.core.utils.types import ArticulationActions
-from ...actuators import HebiMotor
+from ...actuators import HebiStrategy3Actuator, HebiStrategy4Actuator
 import omni.isaac.lab.utils.math as math_utils
 from omni.isaac.lab.assets.articulation.articulation import Articulation
 if TYPE_CHECKING:
@@ -241,7 +241,7 @@ class HebiArticulation(Articulation):
                 joint_indices=actuator.joint_indices,
             )
             # compute joint command from the actuator model
-            if isinstance(actuator, HebiMotor):
+            if isinstance(actuator, HebiStrategy3Actuator) or isinstance(actuator, HebiStrategy4Actuator):
                 control_action = actuator.compute(
                     control_action,
                     joint_pos=self._data.joint_pos[:, actuator.joint_indices],

@@ -8,7 +8,6 @@ from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.sensors import FrameTransformer
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedRLEnv
-from omni.isaac.lab.utils.math import combine_frame_transforms
 
 
 def get_frame1_frame2_distance(frame1, frame2):

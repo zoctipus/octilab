@@ -1,5 +1,5 @@
 from omni.isaac.lab.utils import configclass
-from omni.isaac.lab.envs.base_env_cfg import ManagerBasedEnvCfg
+from omni.isaac.lab.envs.manager_based_rl_env_cfg import ManagerBasedEnvCfg
 
 
 def create_hebi_env(base_env_cfg: ManagerBasedEnvCfg, rd_action_class):

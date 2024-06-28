@@ -1,23 +1,21 @@
-# Copyright (c) 2022-2024, The ORBIT Project Developers.
+# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
-from __future__ import annotations
 
 from dataclasses import MISSING
 from typing import Literal
 
 from omni.isaac.lab.utils import configclass
 
-from .tycho_differential_ik import TychoDifferentialIKController
+from .differential_ik import DifferentialIKController
 
 
 @configclass
-class TychoDifferentialIKControllerCfg:
+class DifferentialIKControllerCfg:
     """Configuration for differential inverse kinematics controller."""
 
-    class_type: type = TychoDifferentialIKController
+    class_type: type = DifferentialIKController
     """The associated controller class."""
 
     command_type: Literal["position", "pose"] = MISSING
@@ -51,8 +49,6 @@ class TychoDifferentialIKControllerCfg:
     - Damped Moore-Penrose pseudo-inverse ("dls"):
         - "lambda_val": Damping coefficient (default: 0.01).
     """
-
-    operational_ee_range: list = []
 
     def __post_init__(self):
         # check valid input

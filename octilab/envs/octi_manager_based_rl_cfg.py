@@ -8,9 +8,9 @@ from __future__ import annotations
 from dataclasses import MISSING
 
 from omni.isaac.lab.utils import configclass
-from omni.isaac.lab.envs.rl_env_cfg import ManagerBasedRLEnvCfg
+from omni.isaac.lab.envs.manager_based_rl_env_cfg import ManagerBasedRLEnvCfg
 
 
 @configclass
-class HebiRLTaskEnvCfg(ManagerBasedRLEnvCfg):
+class OctiManagerBasedRLEnvCfg(ManagerBasedRLEnvCfg):
     datas: object = MISSING

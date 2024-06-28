@@ -13,12 +13,12 @@ from omni.isaac.lab.markers.config import FRAME_MARKER_CFG
 from omni.isaac.lab.envs import ManagerBasedRLEnv
 from .deformable_base_env import DeformableBaseEnv
 from omni.isaac.lab.envs.manager_based_env import VecEnvObs
-from ..envs.hebi_rl_task_env_cfg import HebiRLTaskEnvCfg
+from .octi_manager_based_rl_cfg import OctiManagerBasedRLEnvCfg
 from ..managers.data_manager import DataManager
 VecEnvStepReturn = tuple[VecEnvObs, torch.Tensor, torch.Tensor, torch.Tensor, dict]
 
 
-class HebiRLTaskEnv(ManagerBasedRLEnv):
+class OctiManagerBasedRLEnv(ManagerBasedRLEnv):
     """The superclass for reinforcement learning-based environments.
 
     This class inherits from :class:`ManagerBasedEnvCfg` and implements the core functionality for
@@ -47,16 +47,19 @@ class HebiRLTaskEnv(ManagerBasedRLEnv):
         in a vectorized environment.
 
     """
-    cfg: HebiRLTaskEnvCfg
+    cfg: OctiManagerBasedRLEnvCfg
     """Configuration for the environment."""
 
-    def __init__(self, cfg: HebiRLTaskEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: OctiManagerBasedRLEnvCfg, render_mode: str | None = None, **kwargs):
         ManagerBasedRLEnv.__bases__ = (DeformableBaseEnv, gym.Env)
         super().__init__(cfg, render_mode)
         # RLTaskEnv.__bases__ = (BaseEnv, gym.Env)
         frame_marker_cfg = FRAME_MARKER_CFG.copy()
         frame_marker_cfg.markers["frame"].scale = (0.02, 0.02, 0.02)
         self.goal_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+        # self.goal_marker1 = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+        # self.goal_marker2 = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+        # self.goal_marker3 = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
         self.trajectory_memory = {}
     """
     Operations - MDP
@@ -81,28 +84,26 @@ class HebiRLTaskEnv(ManagerBasedRLEnv):
         Returns:
             A tuple containing the observations, rewards, resets (terminated and truncated) and extras.
         """
-        if torch.isnan(action).any():
-            print("stop")
-        action[torch.isnan(action).any(dim=1)] = 0
         # process actions
         self.action_manager.process_action(action)
         # perform physics stepping
         for _ in range(self.cfg.decimation):
+            self._sim_step_counter += 1
             # set actions into buffers
             self.action_manager.apply_action()
             # set actions into simulator
             self.scene.write_data_to_sim()
+            render = self._sim_step_counter % self.cfg.sim.render_interval == 0 and (
+                self.sim.has_gui() or self.sim.has_rtx_sensors()
+            )
             # simulate
-            self.sim.step(render=False)
+            self.sim.step(render=render)
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
-        # perform rendering if gui is enabled
-        if self.sim.has_gui():
-            self.sim.render()
 
         des_pos = self.action_manager._terms.get('body_joint_pos')._ik_controller
         self.goal_marker.visualize(
-            des_pos.ee_pos_des[:, 0:3] + self.scene._default_env_origins, des_pos.ee_quat_des[:, 0:4])
+            des_pos.ee_pos_des + self.scene._default_env_origins, des_pos.ee_quat_des[:, 0:4])
         self.data_manager.compute()
         # post-step:
         # -- update env counters (used for curriculum generation)

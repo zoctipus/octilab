@@ -1,3 +1,3 @@
 from .deformable_base_env import DeformableBaseEnv
-from .hebi_rl_task_env import HebiRLTaskEnv
-from .hebi_rl_task_env_cfg import HebiRLTaskEnvCfg
+from .octi_manager_based_rl import OctiManagerBasedRLEnv
+from .octi_manager_based_rl_cfg import OctiManagerBasedRLEnvCfg

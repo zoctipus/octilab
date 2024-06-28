@@ -1,19 +1,14 @@
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
 import torch
-from typing import TYPE_CHECKING, Literal
-
-import omni.isaac.lab.utils.math as math_utils
-from omni.isaac.lab.actuators import ImplicitActuator
-from omni.isaac.lab.assets import Articulation, RigidObject
+from omni.isaac.lab.assets import Articulation
 from omni.isaac.lab.managers import SceneEntityCfg
-from omni.isaac.lab.terrains import TerrainImporter
 
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedEnv
 
 
-def update_joint_positions(
+def update_joint_target_positions_to_current(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor | None,
     asset_name: str
@@ -23,7 +18,7 @@ def update_joint_positions(
     asset.set_joint_position_target(joint_pos_target)
 
 
-def reset_tycho_to_default(env: ManagerBasedEnv, env_ids: torch.Tensor, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
+def reset_robot_to_default(env: ManagerBasedEnv, env_ids: torch.Tensor, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     """Reset the scene to the default state specified in the scene configuration."""
     robot: Articulation = env.scene[robot_cfg.name]
     default_root_state = robot.data.default_root_state[env_ids].clone()

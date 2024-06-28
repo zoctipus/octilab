@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import Any
 from omni.isaac.core.prims import XFormPrimView
 import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.assets import AssetBaseCfg, RigidObject, RigidObjectCfg
+from omni.isaac.lab.assets import AssetBaseCfg, RigidObject, RigidObjectCfg, ArticulationCfg
 from ..assets import DeformableCfg, HebiArticulationCfg
 from omni.isaac.lab.sensors import FrameTransformerCfg, SensorBaseCfg
 from omni.isaac.lab.terrains import TerrainImporterCfg
@@ -102,7 +102,7 @@ class DeformableInteractiveScene(InteractiveScene):
                 asset_cfg.num_envs = self.cfg.num_envs
                 asset_cfg.env_spacing = self.cfg.env_spacing
                 self._terrain = asset_cfg.class_type(asset_cfg)
-            elif isinstance(asset_cfg, HebiArticulationCfg):
+            elif isinstance(asset_cfg, HebiArticulationCfg) or isinstance(asset_cfg, ArticulationCfg):
                 self._articulations[asset_name] = asset_cfg.class_type(asset_cfg)
             elif isinstance(asset_cfg, RigidObjectCfg):
                 self._rigid_objects[asset_name] = asset_cfg.class_type(asset_cfg)

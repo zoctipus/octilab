@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024, The ORBIT Project Developers.
+# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
@@ -6,17 +6,18 @@
 from __future__ import annotations
 
 import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import carb
 
 import omni.isaac.lab.utils.math as math_utils
 from omni.isaac.lab.assets.articulation import Articulation
-from omni.isaac.lab.controllers.differential_ik import DifferentialIKController
+from octilab.controllers.differential_ik import DifferentialIKController
 from omni.isaac.lab.managers.action_manager import ActionTerm
 
 if TYPE_CHECKING:
-    from omni.isaac.lab.envs import ManagerBasedEnvCfg
+    from omni.isaac.lab.envs import ManagerBasedEnv
 
     from . import actions_cfg
 
@@ -42,7 +43,7 @@ class DifferentialInverseKinematicsAction(ActionTerm):
     _scale: torch.Tensor
     """The scaling factor applied to the input action. Shape is (1, action_dim)."""
 
-    def __init__(self, cfg: actions_cfg.DifferentialInverseKinematicsActionCfg, env: ManagerBasedEnvCfg):
+    def __init__(self, cfg: actions_cfg.DifferentialInverseKinematicsActionCfg, env: ManagerBasedEnv):
         # initialize the action term
         super().__init__(cfg, env)
 
@@ -51,18 +52,14 @@ class DifferentialInverseKinematicsAction(ActionTerm):
         self._num_joints = len(self._joint_ids)
         # parse the body index
         body_ids, body_names = self._asset.find_bodies(self.cfg.body_name)
-        if len(body_ids) != 1:
-            raise ValueError(
-                f"Expected one match for the body name: {self.cfg.body_name}. Found {len(body_ids)}: {body_names}."
-            )
         # save only the first body index
-        self._body_idx = body_ids[0]
-        self._body_name = body_names[0]
+        self._body_idx = body_ids
+        self._body_name = body_names
         # check if articulation is fixed-base
         # if fixed-base then the jacobian for the base is not computed
         # this means that number of bodies is one less than the articulation's number of bodies
         if self._asset.is_fixed_base:
-            self._jacobi_body_idx = self._body_idx - 1
+            self._jacobi_body_idx = [i - 1 for i in self._body_idx]
         else:
             self._jacobi_body_idx = self._body_idx
 
@@ -80,7 +77,7 @@ class DifferentialInverseKinematicsAction(ActionTerm):
 
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
-            cfg=self.cfg.controller, num_envs=self.num_envs, device=self.device
+            cfg=self.cfg.controller, num_bodies=len(self._body_idx), num_envs=self.num_envs, device=self.device
         )
 
         # create tensors for raw and processed actions
@@ -93,8 +90,8 @@ class DifferentialInverseKinematicsAction(ActionTerm):
 
         # convert the fixed offsets to torch tensors of batched shape
         if self.cfg.body_offset is not None:
-            self._offset_pos = torch.tensor(self.cfg.body_offset.pos, device=self.device).repeat(self.num_envs, 1)
-            self._offset_rot = torch.tensor(self.cfg.body_offset.rot, device=self.device).repeat(self.num_envs, 1)
+            self._offset_pos = torch.tensor(self.cfg.body_offset.pos, device=self.device).repeat(len(self._body_idx), 1)
+            self._offset_rot = torch.tensor(self.cfg.body_offset.rot, device=self.device).repeat(len(self._body_idx), 1)
         else:
             self._offset_pos, self._offset_rot = None, None
 
@@ -138,7 +135,12 @@ class DifferentialInverseKinematicsAction(ActionTerm):
         else:
             joint_pos_des = joint_pos.clone()
         # set the joint position command
+        # joint_pos_des[:, :6] = self._ik_controller.ee_pos_des[:, :6]
+        # joint_pos_des[:, :3] = self._ik_controller.ee_pos_des[4, :3]
         self._asset.set_joint_position_target(joint_pos_des, self._joint_ids)
+
+    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+        self._raw_actions[env_ids] = 0.0
 
     """
     Helper functions.
@@ -152,10 +154,10 @@ class DifferentialInverseKinematicsAction(ActionTerm):
         """
         # obtain quantities from simulation
         ee_pose_w = self._asset.data.body_state_w[:, self._body_idx, :7]
-        root_pose_w = self._asset.data.root_state_w[:, :7]
+        root_pose_w = self._asset.data.root_state_w[:, :7].repeat(len(self._body_idx), 1)
         # compute the pose of the body in the root frame
         ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(
-            root_pose_w[:, 0:3], root_pose_w[:, 3:7], ee_pose_w[:, 0:3], ee_pose_w[:, 3:7]
+            root_pose_w[:, 0:3], root_pose_w[:, 3:7], ee_pose_w[0, :, 0:3], ee_pose_w[0, :, 3:7]
         )
         # account for the offset
         if self.cfg.body_offset is not None:
@@ -174,15 +176,15 @@ class DifferentialInverseKinematicsAction(ActionTerm):
         # read the parent jacobian
         jacobian = self._asset.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, self._joint_ids]
         # account for the offset
-        if self.cfg.body_offset is not None:
-            # Modify the jacobian to account for the offset
-            # -- translational part
-            # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
-            #        = (v_J_ee + w_J_ee x r_link_ee ) * q
-            #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
-            jacobian[:, 0:3, :] += torch.bmm(-math_utils.skew_symmetric_matrix(self._offset_pos), jacobian[:, 3:, :])
-            # -- rotational part
-            # w_link = R_link_ee @ w_ee
-            jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
+        # if self.cfg.body_offset is not None:
+        #     # Modify the jacobian to account for the offset
+        #     # -- translational part
+        #     # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
+        #     #        = (v_J_ee + w_J_ee x r_link_ee ) * q
+        #     #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
+        #     jacobian[:, 0:3, :] += torch.bmm(-math_utils.skew_symmetric_matrix(self._offset_pos), jacobian[:, 3:, :])
+        #     # -- rotational part
+        #     # w_link = R_link_ee @ w_ee
+        #     jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
 
         return jacobian

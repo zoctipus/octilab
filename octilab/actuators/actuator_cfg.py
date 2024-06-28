@@ -9,28 +9,84 @@ from omni.isaac.lab.utils import configclass
 from . import actuator_pd
 from omni.isaac.lab.actuators.actuator_cfg import ActuatorBaseCfg
 
-'''
-Orbit Implemented Explicit Actuators for Use
-
-If error happens from the import below, orbit has been updated. This is a sign
-for tycho developers to update the reference.
-'''
 
 @configclass
-class HebiMotorCfg(ActuatorBaseCfg):
-    """Configuration for MLP-based actuator model."""
-    class_type: type = actuator_pd.HebiMotor
+class EffortMotorCfg(ActuatorBaseCfg):
 
+    class_type: type = actuator_pd.EffortMotor
+    actuation_limit: list = MISSING
+
+
+@configclass
+class HebiStrategy3ActuatorCfg(ActuatorBaseCfg):
+    """Configuration for MLP-based actuator model."""
+    class_type: type = actuator_pd.HebiStrategy3Actuator
     '''
     We reference the stiffness(P) and damping(D)
     from gain_xml as how it done in tycho_master
     instead of setting them in stiffness and damping field below.
     '''
-    stiffness = None
-    damping = None
 
-    gain_xml_path: str = MISSING
+    kp: list = MISSING
 
-    only_position_control: bool = False
+    ki: list = MISSING
 
-    actuator_biasprm: list = MISSING
+    kd: list = MISSING
+
+    i_clamp: list = MISSING
+
+    min_target: list = MISSING
+
+    max_target: list = MISSING
+
+    target_lowpass: list = MISSING
+
+    min_output: list = MISSING
+
+    max_output: list = MISSING
+
+    output_lowpass: list = MISSING
+
+    d_on_error: list = MISSING
+
+    maxtorque: list = MISSING
+
+    speed_24v: list = MISSING
+
+
+@configclass
+class HebiStrategy4ActuatorCfg(HebiStrategy3ActuatorCfg):
+    """Configuration for MLP-based actuator model."""
+    class_type: type = actuator_pd.HebiStrategy4Actuator
+
+    p_p: list = MISSING
+
+    p_d: list = MISSING
+
+    e_p: list = MISSING
+
+    e_d: list = MISSING
+
+
+@configclass
+class HebiDCMotorCfg(ActuatorBaseCfg):
+    """Configuration for direct control (DC) motor actuator model."""
+
+    class_type: type = actuator_pd.HebiDCMotor
+
+    dt: float = MISSING
+
+    p_p: list = MISSING
+
+    p_d: list = MISSING
+
+    e_p: list = MISSING
+
+    e_d: list = MISSING
+
+    saturation_effort: list = MISSING
+
+    maxtorque: list = MISSING
+
+    speed_24v: list = MISSING
+    """Peak motor force/torque of the electric DC motor (in N-m)."""

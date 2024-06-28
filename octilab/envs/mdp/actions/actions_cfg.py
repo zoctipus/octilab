@@ -8,12 +8,10 @@ from __future__ import annotations
 from dataclasses import MISSING
 
 from omni.isaac.lab.controllers import DifferentialIKControllerCfg
-from ....controllers.tycho_differential_ik_cfg import TychoDifferentialIKControllerCfg
-from ....controllers.tycho_controller_utils.tycho_controller_cfg import TychoControllerCfg
 from omni.isaac.lab.managers.action_manager import ActionTerm, ActionTermCfg
 from omni.isaac.lab.utils import configclass
 
-from . import binary_joint_actions, joint_actions, non_holonomic_actions, task_space_actions, tycho_controller_task_space_actions
+from . import binary_joint_actions, joint_actions, non_holonomic_actions, task_space_actions
 
 ##
 # Joint actions.
@@ -211,7 +209,7 @@ class DifferentialInverseKinematicsActionCfg(ActionTermCfg):
 
     joint_names: list[str] = MISSING
     """List of joint names or regex expressions that the action will be mapped to."""
-    body_name: str = MISSING
+    body_name: list[str] = MISSING
     """Name of the body or frame for which IK is performed."""
     body_offset: OffsetCfg | None = None
     """Offset of target frame w.r.t. to the body frame. Defaults to None, in which case no offset is applied."""
@@ -219,46 +217,3 @@ class DifferentialInverseKinematicsActionCfg(ActionTermCfg):
     """Scale factor for the action. Defaults to 1.0."""
     controller: DifferentialIKControllerCfg = MISSING
     """The configuration for the differential IK controller."""
-
-
-
-##
-# Task-space Actions.
-##
-
-@configclass
-class TychoControllerDifferentialInverseKinematicsActionCfg(ActionTermCfg):
-    """Configuration for inverse differential kinematics action term.
-
-    See :class:`DifferentialInverseKinematicsAction` for more details.
-    """
-
-    @configclass
-    class OffsetCfg:
-        """The offset pose from parent frame to child frame.
-
-        On many robots, end-effector frames are fictitious frames that do not have a corresponding
-        rigid body. In such cases, it is easier to define this transform w.r.t. their parent rigid body.
-        For instance, for the Franka Emika arm, the end-effector is defined at an offset to the the
-        "panda_hand" frame.
-        """
-
-        pos: tuple[float, float, float] = (0.0, 0.0, 0.0)
-        """Translation w.r.t. the parent frame. Defaults to (0.0, 0.0, 0.0)."""
-        rot: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
-        """Quaternion rotation ``(w, x, y, z)`` w.r.t. the parent frame. Defaults to (1.0, 0.0, 0.0, 0.0)."""
-
-    class_type: type[ActionTerm] = tycho_controller_task_space_actions.TychoControllerDifferentialInverseKinematicsAction
-
-    joint_names: list[str] = MISSING
-    """List of joint names or regex expressions that the action will be mapped to."""
-    body_name: str = MISSING
-    """Name of the body or frame for which IK is performed."""
-    body_offset: OffsetCfg | None = None
-    """Offset of target frame w.r.t. to the body frame. Defaults to None, in which case no offset is applied."""
-    scale: float | tuple[float, ...] = 1.0
-    """Scale factor for the action. Defaults to 1.0."""
-    tycho_differential_controller: TychoDifferentialIKControllerCfg = MISSING
-    """The configuration for the differential IK controller."""
-    tycho_controller: TychoControllerCfg= MISSING
-    """The configuration for the tycho controller."""
