@@ -124,4 +124,3 @@ class Rokoko_Glove(DeviceBase):
         bone_length = np.linalg.norm(wrist_position - middle_proximal_position)
         normalized_hand_positions = (middle_proximal_position - hand_positions) / bone_length
         return normalized_hand_positions
-

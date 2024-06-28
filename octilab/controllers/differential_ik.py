@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 from omni.isaac.lab.utils.math import apply_delta_pose, compute_pose_error
 
 if TYPE_CHECKING:
-    from .differential_ik_cfg import DifferentialIKControllerCfg
+    from .differential_ik_cfg import MultiConstraintDifferentialIKControllerCfg
 
 
-class DifferentialIKController:
+class MultiConstraintDifferentialIKController:
     r"""Differential inverse kinematics (IK) controller.
 
     This controller is based on the concept of differential inverse kinematics [1, 2] which is a method for computing
@@ -45,7 +45,7 @@ class DifferentialIKController:
         [2] https://www.cs.cmu.edu/~15464-s13/lectures/lecture6/iksurvey.pdf
     """
 
-    def __init__(self, cfg: DifferentialIKControllerCfg, num_bodies: int, num_envs: int, device: str):
+    def __init__(self, cfg: MultiConstraintDifferentialIKControllerCfg, num_bodies: int, num_envs: int, device: str):
         """Initialize the controller.
 
         Args:
@@ -56,12 +56,13 @@ class DifferentialIKController:
         # store inputs
         self.cfg = cfg
         self.num_envs = num_envs
+        self.num_bodies = num_bodies
         self._device = device
         # create buffers
-        self.ee_pos_des = torch.zeros(num_bodies, 3, device=self._device)
-        self.ee_quat_des = torch.zeros(num_bodies, 4, device=self._device)
+        self.ee_pos_des = torch.zeros(self.num_envs, self.num_bodies, 3, device=self._device)
+        self.ee_quat_des = torch.zeros(self.num_envs, self.num_bodies, 4, device=self._device)
         # -- input command
-        self._command = torch.zeros(num_bodies, 3, device=self._device)
+        self._command = torch.zeros(self.num_envs, self.action_dim, device=self._device)
 
     """
     Properties.
@@ -70,7 +71,12 @@ class DifferentialIKController:
     @property
     def action_dim(self) -> int:
         """Dimension of the controller's input command."""
-        return 15
+        if self.cfg.command_type == "position":
+            return 3 * self.num_bodies  # (x, y, z)
+        elif self.cfg.command_type == "pose" and self.cfg.use_relative_mode:
+            return 6 * self.num_bodies  # (dx, dy, dz, droll, dpitch, dyaw)
+        else:
+            return 7 * self.num_bodies  # (x, y, z, qw, qx, qy, qz)
 
     """
     Operations.
@@ -106,7 +112,7 @@ class DifferentialIKController:
             ValueError: If the command type is ``pose_rel`` and either :attr:`ee_pos` or :attr:`ee_quat` is None.
         """
         # store command
-        self._command[:] = command.reshape(-1, 3)
+        self._command[:] = command
         # compute the desired end-effector pose
         if self.cfg.command_type == "position":
             # we need end-effector orientation even though we are in position mode
@@ -153,7 +159,6 @@ class DifferentialIKController:
             position_error = self.ee_pos_des - ee_pos
             jacobian_pos = jacobian[:, :, 0:3, :]
             delta_joint_pos = self._compute_delta_joint_pos(delta_pose=position_error, jacobian=jacobian_pos)
-            print(self.ee_pos_des, ee_pos)
         else:
             position_error, axis_angle_error = compute_pose_error(
                 ee_pos, ee_quat, self.ee_pos_des, self.ee_quat_des, rot_error_type="axis_angle"
@@ -166,69 +171,6 @@ class DifferentialIKController:
     """
     Helper functions.
     """
-
-    # def _compute_delta_joint_pos(self, delta_pose: torch.Tensor, jacobian: torch.Tensor) -> torch.Tensor:
-    #     """Computes the change in joint position that yields the desired change in pose.
-
-    #     The method uses the Jacobian mapping from joint-space velocities to end-effector velocities
-    #     to compute the delta-change in the joint-space that moves the robot closer to a desired
-    #     end-effector position.
-
-    #     Args:
-    #         delta_pose: The desired delta pose in shape (N, 3) or (N, 6).
-    #         jacobian: The geometric jacobian matrix in shape (N, 3, num_joints) or (N, 6, num_joints).
-
-    #     Returns:
-    #         The desired delta in joint space. Shape is (N, num-jointsß).
-    #     """
-    #     if self.cfg.ik_params is None:
-    #         raise RuntimeError(f"Inverse-kinematics parameters for method '{self.cfg.ik_method}' is not defined!")
-    #     # compute the delta in joint-space
-    #     if self.cfg.ik_method == "pinv":  # Jacobian pseudo-inverse
-    #         # parameters
-    #         k_val = self.cfg.ik_params["k_val"]
-    #         # computation
-    #         jacobian_pinv = torch.linalg.pinv(jacobian)
-    #         delta_joint_pos = k_val * jacobian_pinv @ delta_pose.unsqueeze(-1)
-    #         delta_joint_pos = delta_joint_pos.squeeze(-1)
-    #     elif self.cfg.ik_method == "svd":  # adaptive SVD
-    #         # parameters
-    #         k_val = self.cfg.ik_params["k_val"]
-    #         min_singular_value = self.cfg.ik_params["min_singular_value"]
-    #         # computation
-    #         # U: 6xd, S: dxd, V: d x num-joint
-    #         U, S, Vh = torch.linalg.svd(jacobian)
-    #         S_inv = 1.0 / S
-    #         S_inv = torch.where(S > min_singular_value, S_inv, torch.zeros_like(S_inv))
-    #         jacobian_pinv = (
-    #             torch.transpose(Vh, dim0=1, dim1=2)[:, :, :6]
-    #             @ torch.diag_embed(S_inv)
-    #             @ torch.transpose(U, dim0=1, dim1=2)
-    #         )
-    #         delta_joint_pos = k_val * jacobian_pinv @ delta_pose.unsqueeze(-1)
-    #         delta_joint_pos = delta_joint_pos.squeeze(-1)
-    #     elif self.cfg.ik_method == "trans":  # Jacobian transpose
-    #         # parameters
-    #         k_val = self.cfg.ik_params["k_val"]
-    #         # computation
-    #         jacobian_T = torch.transpose(jacobian, dim0=1, dim1=2)
-    #         delta_joint_pos = k_val * jacobian_T @ delta_pose.unsqueeze(-1)
-    #         delta_joint_pos = delta_joint_pos.squeeze(-1)
-    #     elif self.cfg.ik_method == "dls":  # damped least squares
-    #         # parameters
-            
-    #         lambda_val = self.cfg.ik_params["lambda_val"]
-    #         # computation
-    #         jacobian_T = torch.transpose(jacobian, dim0=2, dim1=3)
-    #         lambda_matrix = (lambda_val**2) * torch.eye(n=jacobian.shape[2], device=self._device)
-    #         delta_joint_pos = (
-    #             jacobian_T @ torch.inverse(jacobian @ jacobian_T + lambda_matrix) @ delta_pose.unsqueeze(-1)
-    #         )
-    #         delta_joint_pos = delta_joint_pos.squeeze(-1)
-    #     else:
-    #         raise ValueError(f"Unsupported inverse-kinematics method: {self.cfg.ik_method}")
-
-    #     return delta_joint_pos
 
     def _compute_delta_joint_pos(self, delta_pose: torch.Tensor, jacobian: torch.Tensor) -> torch.Tensor:
         """Computes the change in joint position that yields the desired change in pose.

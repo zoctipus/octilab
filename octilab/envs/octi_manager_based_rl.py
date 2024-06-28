@@ -101,9 +101,9 @@ class OctiManagerBasedRLEnv(ManagerBasedRLEnv):
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
 
-        des_pos = self.action_manager._terms.get('body_joint_pos')._ik_controller
+        des_pos = self.action_manager._terms.get('index_finger')._ik_controller
         self.goal_marker.visualize(
-            des_pos.ee_pos_des + self.scene._default_env_origins, des_pos.ee_quat_des[:, 0:4])
+            des_pos.ee_pos_des[0] + self.scene._default_env_origins, des_pos.ee_quat_des[0, :, 0:4])
         self.data_manager.compute()
         # post-step:
         # -- update env counters (used for curriculum generation)
