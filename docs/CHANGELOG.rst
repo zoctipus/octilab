@@ -1,6 +1,20 @@
 Changelog
 ---------
 
+0.1.3 (2024-06-28)
+~~~~~~~~~~~~~~~~~~
+
+Added
+^^^^^
+
+* Added :class:`octilab.envs.mdp.actions.MultiConstraintsDifferentialInverseKinematicsActionCfg`
+
+
+Changed
+^^^^^^^
+* cleaned, memory preallocated :class:`octilab.device.rokoko_udp_receiver.Rokoko_Glove` so it is much more readable and efficient
+
+
 0.1.2 (2024-06-27)
 ~~~~~~~~~~~~~~~~~~
 

@@ -2,16 +2,19 @@ import socket
 import lz4.frame
 import numpy as np
 from omni.isaac.lab.devices import DeviceBase
+from typing import Literal
 import json
 import torch
 from collections.abc import Callable
-from omni.isaac.lab.utils.math import quat_inv, quat_mul
 
 
 class Rokoko_Glove(DeviceBase):
-    def __init__(self, pos_sensitivity: float = 0.4, rot_sensitivity: float = 0.8, device="cuda:0"):
+    def __init__(self,
+                 pos_sensitivity: float = 0.4,
+                 rot_sensitivity: float = 0.8,
+                 which_hand: Literal["left", "right", "bimanual"] = "right",
+                 device="cuda:0"):
         self.device = device
-        self.fingertip_poses = torch.zeros((12, 7), device=self.device)
         self._additional_callbacks = dict()
         # Define the IP address and port to listen on
         UDP_IP = "0.0.0.0"  # Listen on all available network interfaces
@@ -20,7 +23,6 @@ class Rokoko_Glove(DeviceBase):
         # Create a UDP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
-        # self.sock.setblocking(False)
         self.sock.bind((UDP_IP, UDP_PORT))
 
         print(f"Listening for UDP packets on {UDP_IP}:{UDP_PORT}")
@@ -39,10 +41,27 @@ class Rokoko_Glove(DeviceBase):
             'rightRingProximal', 'rightRingMedial', 'rightRingDistal', 'rightRingTip',
             'rightLittleProximal', 'rightLittleMedial', 'rightLittleDistal', 'rightLittleTip']
 
-        self.left_fingertip_names = ["leftThumbDistal", "leftIndexDistal", "leftMiddleDistal", "leftRingDistal", "leftLittleDistal"]
-        self.right_fingertip_names = ["rightThumbDistal", "rightIndexDistal", "rightMiddleDistal", "rightRingDistal", "rightLittleDistal"]
-        self.left_fingertip_index = [self.left_hand_joint_names.index(joint_name) for joint_name in self.left_fingertip_names]
-        self.right_fingertip_index = [self.right_hand_joint_names.index(joint_name) for joint_name in self.right_fingertip_names]
+        self.right_hand_joint_dict = {self.right_hand_joint_names[i] : i for i in range(len(self.right_hand_joint_names))}
+        self.left_hand_joint_dict = {self.left_hand_joint_names[i] : i for i in range(len(self.left_hand_joint_names))}
+
+        self.left_fingertip_names = ["leftHand", "leftThumbDistal", "leftIndexDistal", "leftMiddleDistal", "leftRingDistal", "leftLittleDistal"]
+        self.right_fingertip_names = ["rightHand", "rightThumbDistal", "rightIndexDistal", "rightMiddleDistal", "rightRingDistal", "rightLittleDistal"]
+        self.left_finger_dict = {self.left_fingertip_names[i] : i for i in range(len(self.left_fingertip_names))}
+        self.right_finger_dict = {self.right_fingertip_names[i] : i for i in range(len(self.right_fingertip_names))}
+
+        self.left_hand_positions = torch.zeros((21, 3), device=self.device)
+        self.right_hand_positions = torch.zeros((21, 3), device=self.device)
+        self.left_hand_orientations = torch.zeros((21, 4), device=self.device)
+        self.right_hand_orientations = torch.zeros((21, 4), device=self.device)
+
+        self.left_hand_positions = torch.zeros((21, 3), device=self.device)
+        self.right_hand_positions = torch.zeros((21, 3), device=self.device)
+        self.left_hand_orientations = torch.zeros((21, 4), device=self.device)
+        self.right_hand_orientations = torch.zeros((21, 4), device=self.device)
+
+        self.left_fingertip_poses = torch.zeros((len(self.left_fingertip_names), 7), device=self.device)
+        self.right_fingertip_poses = torch.zeros((len(self.right_fingertip_names), 7), device=self.device)
+        self.fingertip_poses = torch.zeros((len(self.left_fingertip_names) + len(self.right_fingertip_names), 7), device=self.device)
 
     def reset(self):
         pass
@@ -50,62 +69,32 @@ class Rokoko_Glove(DeviceBase):
     def advance(self):
         data, addr = self.sock.recvfrom(8192)  # Buffer size is 1024 bytes
         decompressed_data = lz4.frame.decompress(data)
-
         received_json = json.loads(decompressed_data)
-        # Initialize arrays to store the positions
-        left_hand_positions = torch.zeros((21, 3), device=self.device)
-        right_hand_positions = torch.zeros((21, 3), device=self.device)
+        body_data = received_json["scene"]["actors"][0]["body"]
 
-        left_hand_orientations = torch.zeros((21, 4), device=self.device)
-        right_hand_orientations = torch.zeros((21, 4), device=self.device)
-
-        # Iterate through the JSON data to extract hand joint positions
-        for joint_name in self.left_hand_joint_names:
-            joint_data = received_json["scene"]["actors"][0]["body"][joint_name]
-            joint_position = torch.tensor(list(joint_data["position"].values()))
-            joint_rotation = torch.tensor(list(joint_data["rotation"].values()))
-            left_hand_positions[self.left_hand_joint_names.index(joint_name)] = joint_position
-            left_hand_orientations[self.left_hand_joint_names.index(joint_name)] = joint_rotation
-
-        for joint_name in self.right_hand_joint_names:
-            joint_data = received_json["scene"]["actors"][0]["body"][joint_name]
-            joint_position = torch.tensor(list(joint_data["position"].values()))
-            joint_rotation = torch.tensor(list(joint_data["rotation"].values()))
-            right_hand_positions[self.right_hand_joint_names.index(joint_name)] = joint_position
-            right_hand_orientations[self.right_hand_joint_names.index(joint_name)] = joint_rotation
-
-        # relative distance to middle proximal joint
-        # normalize by bone distance (distance from wrist to middle proximal)
-        # Define the indices of 'middleProximal' in your joint names
-
-        # # Calculate bone length from 'wrist' to 'middleProximal' for both hands
-        left_wrist_position = left_hand_positions[0]
-        right_wrist_position = right_hand_positions[0]
-        left_wrist_orientation = left_hand_orientations[0]
-        right_wrist_orientation = right_hand_orientations[0]
-
-        right_index_proximal_position = right_hand_positions[self.right_hand_joint_names.index("rightIndexProximal")]
-        right_index_proximal_orientation = right_hand_orientations[self.right_hand_joint_names.index("rightIndexProximal")]
-
-        # left_wrist_orientation_inv = quat_inv(left_wrist_orientation.unsqueeze(0))
-        # right_wrist_orientation_inv = quat_inv(right_wrist_orientation.unsqueeze(0))
         for joint_name in self.left_fingertip_names:
-            self.fingertip_poses[self.left_fingertip_names.index(joint_name), :3] = (left_hand_positions[self.left_hand_joint_names.index(joint_name)])
-            # local_rotation = quat_mul(left_wrist_orientation_inv, left_hand_orientations[self.left_fingertip_names.index(joint_name)].view(1, -1))
-            self.fingertip_poses[self.left_fingertip_names.index(joint_name), 3:] = left_hand_orientations[self.left_fingertip_names.index(joint_name)]
+            joint_data = body_data[joint_name]
+            joint_position = torch.tensor(list(joint_data["position"].values()))
+            joint_rotation = torch.tensor(list(joint_data["rotation"].values()))
+            self.left_fingertip_poses[self.left_finger_dict[joint_name]][:3] = joint_position
+            self.left_fingertip_poses[self.left_finger_dict[joint_name]][3:] = joint_rotation
 
         for joint_name in self.right_fingertip_names:
-            idx = 5 + self.right_fingertip_names.index(joint_name)
-            self.fingertip_poses[idx, :3] = (right_hand_positions[self.right_hand_joint_names.index(joint_name)])
-            self.fingertip_poses[idx, :3] = (self.fingertip_poses[idx, :3] - right_wrist_position) * self.scale + right_wrist_position
-            self.fingertip_poses[idx, 3:] = right_hand_orientations[self.right_fingertip_names.index(joint_name)]
+            joint_data = body_data[joint_name]
+            joint_position = torch.tensor(list(joint_data["position"].values()))
+            joint_rotation = torch.tensor(list(joint_data["rotation"].values()))
+            self.right_fingertip_poses[self.right_finger_dict[joint_name]][:3] = joint_position
+            self.right_fingertip_poses[self.right_finger_dict[joint_name]][3:] = joint_rotation
 
-        self.fingertip_poses[10, :3] = left_wrist_position
-        self.fingertip_poses[10, 3:] = left_wrist_orientation
-        self.fingertip_poses[11, :3] = right_wrist_position
-        self.fingertip_poses[11, 3:] = right_wrist_orientation
+        left_wrist_position = self.left_fingertip_poses[0][:3]
+        right_wrist_position = self.right_fingertip_poses[0][:3]
 
-        return self.fingertip_poses
+        self.left_fingertip_poses[:, :3] = (self.left_fingertip_poses[:, :3] - left_wrist_position) * self.scale + left_wrist_position
+        self.right_fingertip_poses[:, :3] = (self.right_fingertip_poses[:, :3] - right_wrist_position) * self.scale + right_wrist_position
+        self.fingertip_poses[:len(self.left_fingertip_names)] = self.left_fingertip_poses
+        self.fingertip_poses[len(self.left_fingertip_names):] = self.right_fingertip_poses
+
+        return self.fingertip_poses, True  # True being a placeholder statisfy abstract method
 
     def add_callback(self, key: str, func: Callable):
         # check keys supported by callback
